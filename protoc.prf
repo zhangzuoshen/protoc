@@ -1,0 +1,62 @@
+cmd = /usr/local/bin/protoc
+contains(QMAKE_HOST.os, Windows) {
+    cmd = $$system_path($${cmd}.exe)
+}
+exists($$cmd): QT_TOOL.protoc.binary = $$cmd
+
+# qtPrepareTool honors QT_TOOL.protoc.binary if set
+qtPrepareTool(QMAKE_PROTOC, protoc)
+
+defineReplace(protoFilePath) {
+    name = $$absolute_path($$1, $$OUT_PWD)
+    name = $$dirname(name)
+    return($${name})
+}
+
+defineReplace(protoFileName) {
+    return($$absolute_path($$1, $$OUT_PWD))
+}
+
+groups =
+for(entry, PROTO_FILES) {
+    files = $$eval($${entry}.files)
+    isEmpty(files) {
+        files = $$entry
+        group = proto_file
+    } else {
+        group = $${entry}_proto_file
+    }
+    groups *= $$group
+
+    input_list = $$upper($$group)_LIST
+    for(subent, $$list($$unique(files))) {
+
+        !contains(subent, .*\\w\\.proto$) {
+            warning("Invalid Protobuf file: '$$subent', please use 'XXX.proto' instead.")
+            next()
+        }
+
+        $$input_list += $$subent
+    }
+}
+
+for(group, groups) {
+    GROUP = $$upper($$group)
+    input_list = $${GROUP}_LIST
+
+    $${group}_header.input = $$input_list
+    $${group}_header.output  = ${QMAKE_FILE_BASE}.pb.h
+    $${group}_header.variable_out = HEADERS
+    $${group}_header.depends = ${QMAKE_FILE_NAME} $$QT_TOOL.protoc.binary
+    $${group}_header.commands = $$QMAKE_PROTOC --proto_path=${QMAKE_FUNC_FILE_IN_protoFilePath} --cpp_out=$$OUT_PWD ${QMAKE_FUNC_FILE_IN_protoFileName}
+
+    $${group}_source.input = $$input_list
+    $${group}_source.output = ${QMAKE_FILE_BASE}.pb.cc
+    $${group}_source.variable_out = SOURCES
+    $${group}_source.depends += ${QMAKE_FILE_BASE}.pb.h
+    $${group}_source.commands = $$escape_expand(\\n)    # dummy command
+
+
+    QMAKE_EXTRA_COMPILERS += $${group}_header $${group}_source
+}
+
